@@ -2,7 +2,12 @@
 -- Full Pet Sniper + ESP + Webhook + Server Hop Script (With Teleport Link in Webhook)
 
 --// Targeted Pet Configuration
-getgenv().TargetPetNames = {"Tim Cheese"}
+getgenv().TargetPetNames = {
+    "La Grande Combinasion",
+    "Garama and Madundung",
+    "Nuclearo Dinossauro",
+    "Pot Hotspot"
+}
 
 --// Services
 local Players = game:GetService("Players")
@@ -91,7 +96,6 @@ local function sendWebhook(foundPets, jobId)
         table.insert(formattedPets, count > 1 and petName .. " x" .. count or petName)
     end
 
-    -- Build the redirect URL for joining the server
     local joinerUrl = "https://testing5312.github.io/joiner/?placeId=" .. tostring(game.PlaceId) .. "&gameInstanceId=" .. jobId
     local joinerMarkdownLink = "[Click here to join](" .. joinerUrl .. ")"
 
