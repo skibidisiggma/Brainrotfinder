@@ -3,7 +3,7 @@
 
 --// Targeted Pet Configuration
 getgenv().TargetPetNames = {
-    "Chicleteira Bicicleteira"
+    "Chicleteira Bicicleteira",
     "La Grande Combinasion",
     "Garama and Madundung",
     "Nuclearo Dinossauro",
