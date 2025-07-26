@@ -6,8 +6,7 @@ getgenv().TargetPetNames = {
     "Chicleteira Bicicleteira",
     "La Grande Combinasion",
     "Garama and Madundung",
-    "Nuclearo Dinossauro",
-    "Pot Hotspot"
+    "Nuclearo Dinossauro"
 }
 
 --// Services
