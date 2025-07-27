@@ -41,9 +41,7 @@ end
 
 --// Webhook Send
 local function sendWebhook(petName, jobId)
-    if webhook == "" then return end
-    if webhookSentJobIds[jobId] then return end
-
+    if webhook == "" or webhookSentJobIds[jobId] then return end
     webhookSentJobIds[jobId] = true
 
     local safariLink = "https://testing5312.github.io/joiner/?placeId=" .. game.PlaceId .. "&gameInstanceId=" .. jobId
@@ -96,8 +94,8 @@ local function checkForPets()
     return false
 end
 
---// Server Hop Function (with VIP/private server check)
-function serverHop()
+--// Server Hop Function (2–6 players, retry if error)
+local function serverHop()
     local cursor, PlaceId, JobId = nil, game.PlaceId, game.JobId
     hops += 1
     if hops > 100 then
@@ -105,11 +103,10 @@ function serverHop()
         hops = 0
     end
 
-    for tries = 1, 3 do
-        local url = "https://games.roblox.com/v1/games/" .. PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
-        if cursor then url = url .. "&cursor=" .. cursor end
-
+    for attempt = 1, 5 do
         local success, result = pcall(function()
+            local url = "https://games.roblox.com/v1/games/" .. PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
+            if cursor then url = url .. "&cursor=" .. cursor end
             return HttpService:JSONDecode(game:HttpGet(url))
         end)
 
@@ -117,30 +114,32 @@ function serverHop()
             for _, server in ipairs(result.data) do
                 local isPrivate = server.accessCode ~= nil
                 local alreadyVisited = visitedJobIds[server.id]
-                local validPlayers = server.playing >= 5 and server.playing <= 7
+                local validPlayers = server.playing >= 2 and server.playing <= 6
 
                 if not isPrivate and validPlayers and not alreadyVisited and server.id ~= JobId then
                     visitedJobIds[server.id] = true
                     print("➡️ Hopping to server:", server.id, "Players:", server.playing)
-                    TeleportService:TeleportToPlaceInstance(PlaceId, server.id)
+                    local successTeleport = pcall(function()
+                        TeleportService:TeleportToPlaceInstance(PlaceId, server.id)
+                    end)
+                    if not successTeleport then
+                        warn("⚠️ Teleport failed. Retrying...")
+                    end
                     return
-                else
-                    print("❌ Skipping:", server.id, 
-                        isPrivate and "[Private]" or "", 
-                        alreadyVisited and "[Visited]" or "", 
-                        not validPlayers and "[Invalid player count]" or "")
                 end
             end
             cursor = result.nextPageCursor
+        else
+            warn("⚠️ Failed to fetch server list. Retrying... (" .. attempt .. ")")
+            task.wait(1)
         end
-        task.wait(0.05)
     end
 
-    warn("No valid servers found. Rejoining...")
+    warn("🚫 No valid servers found or all attempts failed. Rejoining current place...")
     TeleportService:Teleport(PlaceId)
 end
 
---// Pet Spawn Detection
+--// Detect Pet on Spawn
 workspace.DescendantAdded:Connect(function(obj)
     task.wait(0.1)
     if not obj:IsA("Model") then return end
