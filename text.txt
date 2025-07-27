@@ -16,7 +16,7 @@ local TeleportService = game:GetService("TeleportService")
 local LocalPlayer = Players.LocalPlayer
 
 --// Webhook
-local webhook = "https://discord.com/api/webhooks/1396348628033077248/GEgfTR2u4BmFzyEcCFGsRfo8B1QOqqktXGqnp6fpq_ZC4yJ9Gfhm8viU7qkhaA5Y7GMK"
+local webhook = "https://discord.com/api/webhooks/1398949589792587897/bjhmpxp-gy5zzi_S5gxaJTT4pT0RRlSF3jdI4CuhvoP8y-efC5SoIKRiopMVpDdKZL2X"
 local targetPets = getgenv().TargetPetNames or {}
 
 --// Visited Job Tracking
