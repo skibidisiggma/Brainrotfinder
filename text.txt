@@ -22,7 +22,7 @@ local targetPets = getgenv().TargetPetNames or {}
 --// Visited Job Tracking
 local visitedJobIds = {[game.JobId] = true}
 local hops = 0
-local maxHopsBeforeReset = 200
+local maxHopsBeforeReset = 100
 
 --// Teleport Fail Handling
 local teleportFails = 0
@@ -229,6 +229,7 @@ workspace.DescendantAdded:Connect(function(obj)
                     if not webhookSent then
                         sendWebhook({obj.Name}, game.JobId)
                         webhookSent = true
+                        task.delay(10, serverHop) -- leave after delay
                     end
                 end
                 break
@@ -237,19 +238,34 @@ workspace.DescendantAdded:Connect(function(obj)
     end
 end)
 
---// Start
-task.wait(5.5)
-local petsFound = checkForPets()
-if #petsFound > 0 then
-    for _, name in ipairs(petsFound) do
-        detectedPets[name] = true
+--// Auto-Repeating Sniper Logic
+local function startSniper()
+    webhookSent = false
+    stopHopping = false
+
+    local petsFound = checkForPets()
+
+    if #petsFound > 0 then
+        for _, name in ipairs(petsFound) do
+            detectedPets[name] = true
+        end
+        if not webhookSent then
+            print("🎯 Found pet(s):", table.concat(petsFound, ", "))
+            sendWebhook(petsFound, game.JobId)
+            webhookSent = true
+            task.wait(10)
+            serverHop()
+        end
+    else
+        print("🔍 No target pets found. Hopping to next server...")
+        task.delay(0.25, serverHop)
     end
-    if not webhookSent then
-        print("🎯 Found pet(s):", table.concat(petsFound, ", "))
-        sendWebhook(petsFound, game.JobId)
-        webhookSent = true
-    end
-else
-    print("🔍 No target pets found. Hopping to next server...")
-    task.delay(0.25, serverHop)
+
+    -- Auto-restart after 30s
+    task.delay(30, function()
+        startSniper()
+    end)
 end
+
+--// Start
+task.delay(5.5, startSniper)
