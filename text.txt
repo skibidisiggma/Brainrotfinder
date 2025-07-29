@@ -28,12 +28,12 @@ local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
 local LocalPlayer = Players.LocalPlayer
 
---// State
+--// State (Updated for speed)
 local visitedJobIds = {[game.JobId] = true}
 local hops = 0
-local maxHopsBeforeReset = 100
+local maxHopsBeforeReset = 1000 -- was 100
 local teleportFails = 0
-local maxTeleportRetries = 3
+local maxTeleportRetries = 5 -- was 3
 local detectedPets = {}
 local webhookSent = false
 local stopHopping = false
@@ -77,7 +77,7 @@ local function sendWebhook(foundPets, jobId, url)
 
     local jsonData = HttpService:JSONEncode({
         ["content"] = url == webhookA and "@everyone" or "",
-        ["embeds"] = {{
+        ["embeds"] = { {
             ["title"] = "🐾 Pet(s) Found!",
             ["description"] = "Target pet(s) detected in server.",
             ["fields"] = {
@@ -135,10 +135,10 @@ local function checkForPets()
     return foundA, foundB
 end
 
---// Server Hop
+--// Server Hop (faster loop)
 function serverHop()
     if stopHopping then return end
-    task.wait(0.25)
+    task.wait(0.05)
     hops += 1
     if hops >= maxHopsBeforeReset then
         visitedJobIds = {[game.JobId] = true}
@@ -148,7 +148,7 @@ function serverHop()
     local PlaceId, JobId = game.PlaceId, game.JobId
     local tries, cursor = 0, nil
 
-    while tries < 3 do
+    while tries < maxTeleportRetries do
         local url = "https://games.roblox.com/v1/games/" .. PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
         if cursor then url = url .. "&cursor=" .. cursor end
 
@@ -175,18 +175,18 @@ function serverHop()
             cursor = response.nextPageCursor
             if not cursor then
                 tries += 1
-                task.wait(0.25)
+                task.wait(0.05)
             end
         else
             tries += 1
-            task.wait(0.25)
+            task.wait(0.05)
         end
     end
 
     TeleportService:Teleport(PlaceId)
 end
 
---// Script Loop
+--// Script Loop (faster delay)
 local function startSniper()
     webhookSent = false
     stopHopping = false
@@ -204,7 +204,7 @@ local function startSniper()
         task.wait(10)
         serverHop()
     else
-        task.delay(0.25, serverHop)
+        task.delay(0.05, serverHop)
     end
 
     task.delay(30, startSniper)
