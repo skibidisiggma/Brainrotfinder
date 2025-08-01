@@ -4,6 +4,7 @@
 --// Targeted Pet Configuration
 getgenv().WebhookATargets = {
     "Chicleteira Bicicleteira",
+    "Dragon Cannelloni",
     "La Grande Combinasion",
     "Garama and Madundung",
     "Nuclearo Dinossauro"
