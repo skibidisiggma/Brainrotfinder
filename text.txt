@@ -29,12 +29,12 @@ local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
 local LocalPlayer = Players.LocalPlayer
 
---// State (Updated for speed)
+--// State
 local visitedJobIds = {[game.JobId] = true}
 local hops = 0
-local maxHopsBeforeReset = 1000 -- was 100
+local maxHopsBeforeReset = 1000
 local teleportFails = 0
-local maxTeleportRetries = 5 -- was 3
+local maxTeleportRetries = 10 -- ⬅️ increased from 5 to 10
 local detectedPets = {}
 local webhookSent = false
 local stopHopping = false
@@ -139,7 +139,7 @@ end
 --// Server Hop (faster loop)
 function serverHop()
     if stopHopping then return end
-    task.wait(0.05)
+    task.wait(0.01) -- ⬅️ faster hop
     hops += 1
     if hops >= maxHopsBeforeReset then
         visitedJobIds = {[game.JobId] = true}
@@ -176,18 +176,18 @@ function serverHop()
             cursor = response.nextPageCursor
             if not cursor then
                 tries += 1
-                task.wait(0.05)
+                task.wait(0.01)
             end
         else
             tries += 1
-            task.wait(0.05)
+            task.wait(0.01)
         end
     end
 
     TeleportService:Teleport(PlaceId)
 end
 
---// Script Loop (faster delay)
+--// Script Loop
 local function startSniper()
     webhookSent = false
     stopHopping = false
@@ -205,15 +205,15 @@ local function startSniper()
         task.wait(10)
         serverHop()
     else
-        task.delay(0.05, serverHop)
+        task.delay(0.01, serverHop) -- ⬅️ faster retry
     end
 
-    task.delay(30, startSniper)
+    task.delay(0.25, startSniper) -- ⬅️ faster main loop delay
 end
 
 --// Live Detection
 workspace.DescendantAdded:Connect(function(obj)
-    task.wait(0.1)
+    task.wait(0.02) -- ⬅️ faster response on spawn
     if obj:IsA("Model") then
         local nameLower = string.lower(obj.Name)
 
