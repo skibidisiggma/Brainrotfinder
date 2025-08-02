@@ -1,16 +1,17 @@
+
 --[[ ⚔️ Guild: Nyxara Exploits Hub ]]
--- Full Pet Sniper + ESP + Webhook A + Webhook B + Auto Server Hop + Auto Restart
+-- Full Pet Sniper + ESP + Webhook + Server Hop Script (With Teleport Link in Webhook)
 
 --// Targeted Pet Configuration
-getgenv().WebhookATargets = {
+getgenv().WebhookA_Pets = {
     "Chicleteira Bicicleteira",
-    "Dragon Cannelloni",
     "La Grande Combinasion",
     "Garama and Madundung",
-    "Nuclearo Dinossauro"
+    "Nuclearo Dinossauro",
+    "Dragon Cannelloni"
 }
 
-getgenv().WebhookBTargets = {
+getgenv().WebhookB_Pets = {
     "Los Tralaleritos",
     "Graipuss Medussi",
     "Sammyni Spyderini",
@@ -19,27 +20,35 @@ getgenv().WebhookBTargets = {
     "Las Tralaleritas"
 }
 
---// Webhooks
-local webhookA = "https://discord.com/api/webhooks/1398949589792587897/bjhmpxp-gy5zzi_S5gxaJTT4pT0RRlSF3jdI4CuhvoP8y-efC5SoIKRiopMVpDdKZL2X"
-local webhookB = "https://discord.com/api/webhooks/1399229152649019452/DMtjxmpnDT0LG0NFxhPNil0NdgAEtpco_DBbKkLd2FOx7_z2CnANyooo-pV3kJEUKBnH"
-
 --// Services
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
 local LocalPlayer = Players.LocalPlayer
 
---// State
+--// Webhooks
+local webhookA = "https://discord.com/api/webhooks/1398949589792587897/bjhmpxp-gy5zzi_S5gxaJTT4pT0RRlSF3jdI4CuhvoP8y-efC5SoIKRiopMVpDdKZL2X"
+local webhookB = "https://discord.com/api/webhooks/1399229152649019452/DMtjxmpnDT0LG0NFxhPNil0NdgAEtpco_DBbKkLd2FOx7_z2CnANyooo-pV3kJEUKBnH"
 local visitedJobIds = {[game.JobId] = true}
-local hops = 0
-local maxHopsBeforeReset = 1000
-local teleportFails = 0
-local maxTeleportRetries = 10 -- ⬅️ increased from 5 to 10
 local detectedPets = {}
 local webhookSent = false
 local stopHopping = false
+local hops = 0
+local teleportFails = 0
+local maxTeleportRetries = 3
+local maxHopsBeforeReset = 100
 
---// ESP Function
+--// Helper Functions
+local function isInsideMachine(pet)
+    if pet:FindFirstChild("Label") and string.find(pet.Label.Text:lower(), "in machine") then
+        return true
+    end
+    if pet:FindFirstAncestor("Fuse Machine") or pet:IsDescendantOf(workspace:FindFirstChild("Fuse Machine")) then
+        return true
+    end
+    return false
+end
+
 local function addESP(targetModel)
     if targetModel:FindFirstChild("PetESP") then return end
     local Billboard = Instance.new("BillboardGui")
@@ -61,7 +70,6 @@ local function addESP(targetModel)
     Label.Parent = Billboard
 end
 
---// Webhook Sender
 local function sendWebhook(foundPets, jobId, url)
     local petCounts = {}
     for _, pet in ipairs(foundPets) do
@@ -74,11 +82,8 @@ local function sendWebhook(foundPets, jobId, url)
     end
 
     local joinerUrl = "https://testing5312.github.io/joiner/?placeId=" .. tostring(game.PlaceId) .. "&gameInstanceId=" .. jobId
-    local joinerMarkdownLink = "[Click here to join](" .. joinerUrl .. ")"
-
     local jsonData = HttpService:JSONEncode({
-        ["content"] = url == webhookA and "@everyone" or "",
-        ["embeds"] = { {
+        ["embeds"] = {{
             ["title"] = "🐾 Pet(s) Found!",
             ["description"] = "Target pet(s) detected in server.",
             ["fields"] = {
@@ -86,7 +91,7 @@ local function sendWebhook(foundPets, jobId, url)
                 { ["name"] = "Found Pet(s)", ["value"] = table.concat(formattedPets, "\n") },
                 { ["name"] = "Server JobId", ["value"] = jobId },
                 { ["name"] = "Teleport Script", ["value"] = "game:GetService('TeleportService'):TeleportToPlaceInstance(" .. tostring(game.PlaceId) .. ", '" .. jobId .. "')" },
-                { ["name"] = "🌐 Join Server (via redirect)", ["value"] = joinerMarkdownLink },
+                { ["name"] = "🌐 Join Server (via redirect)", ["value"] = "[Click here to join](" .. joinerUrl .. ")" },
                 { ["name"] = "Time", ["value"] = os.date("%Y-%m-%d %H:%M:%S") }
             },
             ["color"] = 0x00ff00
@@ -106,76 +111,42 @@ local function sendWebhook(foundPets, jobId, url)
     end
 end
 
---// Pet Detection
-local function checkForPets()
-    local foundA = {}
-    local foundB = {}
-
-    for _, obj in pairs(workspace:GetDescendants()) do
-        if obj:IsA("Model") and not obj:FindFirstChild("PetESP") then
-            local nameLower = string.lower(obj.Name)
-
-            for _, target in pairs(getgenv().WebhookATargets) do
-                if string.find(nameLower, string.lower(target)) then
-                    addESP(obj)
-                    table.insert(foundA, obj.Name)
-                    stopHopping = true
-                end
-            end
-
-            for _, target in pairs(getgenv().WebhookBTargets) do
-                if string.find(nameLower, string.lower(target)) then
-                    addESP(obj)
-                    table.insert(foundB, obj.Name)
-                    stopHopping = true
-                end
-            end
-        end
-    end
-
-    return foundA, foundB
-end
-
---// Server Hop (faster loop)
-function serverHop()
+--// Server Hop
+local function serverHop()
     if stopHopping then return end
-    task.wait(0.01) -- ⬅️ faster hop
+    task.wait(0.01)
+    local cursor = nil
+    local PlaceId, JobId = game.PlaceId, game.JobId
+    local tries = 0
     hops += 1
     if hops >= maxHopsBeforeReset then
-        visitedJobIds = {[game.JobId] = true}
+        visitedJobIds = {[JobId] = true}
         hops = 0
     end
-
-    local PlaceId, JobId = game.PlaceId, game.JobId
-    local tries, cursor = 0, nil
-
-    while tries < maxTeleportRetries do
+    while tries < 10 do
         local url = "https://games.roblox.com/v1/games/" .. PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
         if cursor then url = url .. "&cursor=" .. cursor end
-
         local success, response = pcall(function()
             return HttpService:JSONDecode(game:HttpGet(url))
         end)
-
         if success and response and response.data then
             local servers = {}
             for _, server in ipairs(response.data) do
-                if server.playing < server.maxPlayers and not visitedJobIds[server.id] and server.id ~= JobId then
-                    table.insert(servers, server.id)
+                if tonumber(server.playing or 0) < 10
+                    and server.id ~= JobId
+                    and not visitedJobIds[server.id] then
+                        table.insert(servers, server.id)
                 end
             end
-
             if #servers > 0 then
                 local picked = servers[math.random(1, #servers)]
-                visitedJobIds[picked] = true
-                teleportFails = 0
                 TeleportService:TeleportToPlaceInstance(PlaceId, picked)
                 return
             end
-
             cursor = response.nextPageCursor
             if not cursor then
                 tries += 1
+                cursor = nil
                 task.wait(0.01)
             end
         else
@@ -183,67 +154,75 @@ function serverHop()
             task.wait(0.01)
         end
     end
-
     TeleportService:Teleport(PlaceId)
 end
 
---// Script Loop
-local function startSniper()
-    webhookSent = false
-    stopHopping = false
-
-    local foundA, foundB = checkForPets()
-
-    if #foundA > 0 and not webhookSent then
-        sendWebhook(foundA, game.JobId, webhookA)
-        webhookSent = true
-        task.wait(10)
-        serverHop()
-    elseif #foundB > 0 and not webhookSent then
-        sendWebhook(foundB, game.JobId, webhookB)
-        webhookSent = true
-        task.wait(10)
-        serverHop()
-    else
-        task.delay(0.01, serverHop) -- ⬅️ faster retry
+--// Pet Check
+local function checkForPets()
+    local foundA, foundB = {}, {}
+    for _, obj in pairs(workspace:GetDescendants()) do
+        if obj:IsA("Model") and not obj:FindFirstChild("PetESP") then
+            local nameLower = string.lower(obj.Name)
+            for _, petA in pairs(getgenv().WebhookA_Pets) do
+                if string.find(nameLower, string.lower(petA)) and not isInsideMachine(obj) then
+                    table.insert(foundA, obj.Name)
+                    addESP(obj)
+                    break
+                end
+            end
+            for _, petB in pairs(getgenv().WebhookB_Pets) do
+                if string.find(nameLower, string.lower(petB)) and not isInsideMachine(obj) then
+                    table.insert(foundB, obj.Name)
+                    addESP(obj)
+                    break
+                end
+            end
+        end
     end
-
-    task.delay(0.25, startSniper) -- ⬅️ faster main loop delay
+    return foundA, foundB
 end
 
 --// Live Detection
 workspace.DescendantAdded:Connect(function(obj)
-    task.wait(0.02) -- ⬅️ faster response on spawn
+    task.wait(0.02)
     if obj:IsA("Model") then
         local nameLower = string.lower(obj.Name)
-
-        for _, target in pairs(getgenv().WebhookATargets) do
-            if string.find(nameLower, string.lower(target)) and not obj:FindFirstChild("PetESP") then
+        for _, pet in pairs(getgenv().WebhookA_Pets) do
+            if string.find(nameLower, string.lower(pet)) and not obj:FindFirstChild("PetESP") and not isInsideMachine(obj) then
                 if not detectedPets[obj.Name] then
                     detectedPets[obj.Name] = true
                     addESP(obj)
                     sendWebhook({obj.Name}, game.JobId, webhookA)
-                    task.wait(10)
                     serverHop()
                 end
-                return
+                break
             end
         end
-
-        for _, target in pairs(getgenv().WebhookBTargets) do
-            if string.find(nameLower, string.lower(target)) and not obj:FindFirstChild("PetESP") then
+        for _, pet in pairs(getgenv().WebhookB_Pets) do
+            if string.find(nameLower, string.lower(pet)) and not obj:FindFirstChild("PetESP") and not isInsideMachine(obj) then
                 if not detectedPets[obj.Name] then
                     detectedPets[obj.Name] = true
                     addESP(obj)
                     sendWebhook({obj.Name}, game.JobId, webhookB)
-                    task.wait(10)
                     serverHop()
                 end
-                return
+                break
             end
         end
     end
 end)
 
---// Start Sniping
-task.delay(5.5, startSniper)
+--// Start
+task.wait(5)
+local a, b = checkForPets()
+if #a > 0 then
+    for _, name in ipairs(a) do detectedPets[name] = true end
+    sendWebhook(a, game.JobId, webhookA)
+    serverHop()
+elseif #b > 0 then
+    for _, name in ipairs(b) do detectedPets[name] = true end
+    sendWebhook(b, game.JobId, webhookB)
+    serverHop()
+else
+    serverHop()
+end
