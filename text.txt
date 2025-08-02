@@ -23,14 +23,14 @@ local webhookASet = {
 }
 
 local webhookBSet = {
-    ["Los Combinasionas"] = true,
-    ["Garama and Mandundung"] = true,
-    ["Nuclearo Dinossauro"] = true,
-    ["La Grande Combinasion"] = true,
-    ["Dragon Canelloni"] = true,
+    ["Graipuss Medussi"] = true,
+    ["Tortuginni Dragonfruitini"] = true,
+    ["Las Tralaleritas"] = true,
+    ["Las Vaquitas Saturnitas"] = true,
+    ["Pot Hotspot"] = true,
 }
 
--- Webhook C includes all from A and B, only when not in machine
+-- Webhook C includes all from A and B
 local webhookCSet = {}
 for k in pairs(webhookASet) do webhookCSet[k] = true end
 for k in pairs(webhookBSet) do webhookCSet[k] = true end
@@ -43,21 +43,6 @@ local function sendWebhook(url, content)
     end)
 end
 
--- IN MACHINE detection
-local function isInMachine(model)
-    for _, child in ipairs(model:GetChildren()) do
-        if child:IsA("BillboardGui") then
-            local label = child:FindFirstChildWhichIsA("TextLabel")
-            if label and label.Text:upper():find("IN MACHINE") then
-                return true
-            end
-        elseif child:IsA("TextLabel") and child.Text:upper():find("IN MACHINE") then
-            return true
-        end
-    end
-    return false
-end
-
 -- Get teleport script
 local function getTeleportScript()
     return string.format([[local ts = game:GetService("TeleportService")
@@ -66,22 +51,19 @@ ts:TeleportToPlaceInstance(%d, "%s", plr)]], placeId, jobId)
 end
 
 -- Send alert if matched
-local function alertPet(petName, model)
-    local inMachine = isInMachine(model)
-    local mention = ""
+local function alertPet(petName)
     local webhookURL = nil
+    local mention = ""
 
-    if inMachine then
-        if webhookASet[petName] then
-            webhookURL = webhookAURL
-            mention = "@everyone\n"
-        elseif webhookBSet[petName] then
-            webhookURL = webhookBURL
-        end
-    else
-        if webhookCSet[petName] then
-            webhookURL = webhookCURL
-        end
+    if webhookASet[petName] then
+        webhookURL = webhookAURL
+        mention = "@everyone\n"
+    elseif webhookBSet[petName] then
+        webhookURL = webhookBURL
+    end
+
+    if webhookCSet[petName] then
+        webhookURL = webhookCURL
     end
 
     if webhookURL then
@@ -111,7 +93,7 @@ local function scanPets()
             local name = getPetName(obj)
             if name then
                 name = name:gsub("^%s*(.-)%s*$", "%1")
-                alertPet(name, obj)
+                alertPet(name)
             end
         end
     end
@@ -132,24 +114,25 @@ local function serverHop()
 
         if success and data and data.data then
             for _, server in ipairs(data.data) do
-                if server.playing < server.maxPlayers and not server.privateServerId and not visitedJobIds[server.id] then
-                    if server.id ~= jobId then
-                        visitedJobIds[server.id] = true
-                        tries += 1
+                if server.playing < server.maxPlayers and not server.privateServerId and not visitedJobIds[server.id] and server.id ~= jobId then
+                    visitedJobIds[server.id] = true
+                    tries += 1
+                    task.spawn(function()
                         pcall(function()
                             TeleportService:TeleportToPlaceInstance(placeId, server.id, LocalPlayer)
                         end)
-                        task.wait(0.1)
-                    end
+                    end)
+                    task.wait(0.1) -- fast retry delay
                 end
             end
             cursor = data.nextPageCursor
         else
             break
         end
-        task.wait(1)
+        task.wait(0.2)
     end
 
+    -- Restart search if no valid server
     serverHop()
 end
 
@@ -169,9 +152,9 @@ workspace.DescendantAdded:Connect(function(desc)
         local name = getPetName(desc)
         if name then
             name = name:gsub("^%s*(.-)%s*$", "%1")
-            alertPet(name, desc)
+            alertPet(name)
         end
     end
 end)
 
-print("✅ Cleaned pet scanner running. No duplicate pets. Every 3s scan + dynamic detection.")
+print("✅ Pet sniper running with fast hops and separate webhook handling.")
