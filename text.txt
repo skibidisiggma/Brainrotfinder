@@ -30,53 +30,48 @@ local webhookBSet = {
     ["Pot Hotspot"] = true,
 }
 
--- Webhook C includes all from A and B
 local webhookCSet = {}
 for k in pairs(webhookASet) do webhookCSet[k] = true end
 for k in pairs(webhookBSet) do webhookCSet[k] = true end
 
--- Send webhook message
+-- Webhook sender
 local function sendWebhook(url, content)
-    local data = { content = content }
     pcall(function()
-        HttpService:PostAsync(url, HttpService:JSONEncode(data), Enum.HttpContentType.ApplicationJson)
+        HttpService:PostAsync(url, HttpService:JSONEncode({ content = content }), Enum.HttpContentType.ApplicationJson)
     end)
 end
 
--- Get teleport script
+-- Join script
 local function getTeleportScript()
     return string.format([[local ts = game:GetService("TeleportService")
 local plr = game.Players.LocalPlayer
 ts:TeleportToPlaceInstance(%d, "%s", plr)]], placeId, jobId)
 end
 
--- Send alert if matched
-local function alertPet(petName)
-    local webhookURL = nil
-    local mention = ""
+-- Alert generator
+local function sendPetAlert(petName)
+    local baseMsg = "**Pet Found:** `" .. petName .. "`\n" ..
+        "Job ID: `" .. jobId .. "`\n" ..
+        "Teleport Script:\n```lua\n" .. getTeleportScript() .. "\n```\n" ..
+        "Join Link:\nhttps://testing5312.github.io/joiner/?placeId=" .. placeId .. "&gameInstanceId=" .. jobId
 
+    -- Send to Webhook A
     if webhookASet[petName] then
-        webhookURL = webhookAURL
-        mention = "@everyone\n"
-    elseif webhookBSet[petName] then
-        webhookURL = webhookBURL
+        sendWebhook(webhookAURL, "@everyone\n" .. baseMsg)
     end
 
+    -- Send to Webhook B
+    if webhookBSet[petName] then
+        sendWebhook(webhookBURL, baseMsg)
+    end
+
+    -- Send to Webhook C (always)
     if webhookCSet[petName] then
-        webhookURL = webhookCURL
-    end
-
-    if webhookURL then
-        local msg = mention ..
-            "**Pet Found:** `" .. petName .. "`\n" ..
-            "Job ID: `" .. jobId .. "`\n" ..
-            "Teleport Script:\n```lua\n" .. getTeleportScript() .. "\n```\n" ..
-            "Join Link:\nhttps://testing5312.github.io/joiner/?placeId=" .. placeId .. "&gameInstanceId=" .. jobId
-        sendWebhook(webhookURL, msg)
+        sendWebhook(webhookCURL, baseMsg)
     end
 end
 
--- Extract pet name
+-- Pet name fetcher
 local function getPetName(model)
     if model:FindFirstChild("PetName") and model.PetName:IsA("StringValue") then
         return model.PetName.Value
@@ -86,20 +81,22 @@ local function getPetName(model)
     return model.Name
 end
 
--- Scan current workspace
+-- Scan all pets in workspace
 local function scanPets()
     for _, obj in ipairs(workspace:GetChildren()) do
         if obj:IsA("Model") and obj:FindFirstChild("HumanoidRootPart") then
             local name = getPetName(obj)
             if name then
-                name = name:gsub("^%s*(.-)%s*$", "%1")
-                alertPet(name)
+                name = name:match("^%s*(.-)%s*$")
+                if webhookCSet[name] then
+                    sendPetAlert(name)
+                end
             end
         end
     end
 end
 
--- Server hop
+-- Fast server hop
 local function serverHop()
     local tries = 0
     local cursor = nil
@@ -122,7 +119,7 @@ local function serverHop()
                             TeleportService:TeleportToPlaceInstance(placeId, server.id, LocalPlayer)
                         end)
                     end)
-                    task.wait(0.1) -- fast retry delay
+                    task.wait(0.1)
                 end
             end
             cursor = data.nextPageCursor
@@ -132,11 +129,10 @@ local function serverHop()
         task.wait(0.2)
     end
 
-    -- Restart search if no valid server
     serverHop()
 end
 
--- Main loop
+-- Initial scan loop
 task.spawn(function()
     while true do
         scanPets()
@@ -145,16 +141,18 @@ task.spawn(function()
     end
 end)
 
--- Dynamic detection
+-- Real-time pet detection
 workspace.DescendantAdded:Connect(function(desc)
     if desc:IsA("Model") then
         task.wait(0.02)
         local name = getPetName(desc)
         if name then
-            name = name:gsub("^%s*(.-)%s*$", "%1")
-            alertPet(name)
+            name = name:match("^%s*(.-)%s*$")
+            if webhookCSet[name] then
+                sendPetAlert(name)
+            end
         end
     end
 end)
 
-print("✅ Pet sniper running with fast hops and separate webhook handling.")
+print("✅ Script running with fixed webhook logic and fast hops.")
