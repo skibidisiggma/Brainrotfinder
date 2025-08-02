@@ -3,17 +3,18 @@ local TeleportService = game:GetService("TeleportService")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
-local maxTeleportRetries = 125
-local visitedJobIds = {}
 local placeId = game.PlaceId
 local jobId = game.JobId
+local visitedJobIds = {}
+local maxTeleportRetries = 125
+local lastFoundTime = 0
 
 -- Webhooks
 local webhookAURL = "https://discord.com/api/webhooks/1398949589792587897/bjhmpxp-gy5zzi_S5gxaJTT4pT0RRlSF3jdI4CuhvoP8y-efC5SoIKRiopMVpDdKZL2X"
 local webhookBURL = "https://discord.com/api/webhooks/1399229152649019452/DMtjxmpnDT0LG0NFxhPNil0NdgAEtpco_DBbKkLd2FOx7_z2CnANyooo-pV3kJEUKBnH"
 local webhookCURL = "https://discord.com/api/webhooks/1401266472705331341/WTPImz12QYkLLjEbKwsSzj0thFtPpYFa16ARrYFSSpz03Lso74YUecTq4QgTnauTxzO5"
 
--- Pet targets
+-- Pets
 local webhookASet = {
     ["Chicleteira Bicicleteira"] = true,
     ["Dragon Cannelloni"] = true,
@@ -21,7 +22,6 @@ local webhookASet = {
     ["Garama and Madundung"] = true,
     ["Nuclearo Dinossauro"] = true,
 }
-
 local webhookBSet = {
     ["Graipuss Medussi"] = true,
     ["Tortuginni Dragonfruitini"] = true,
@@ -29,10 +29,9 @@ local webhookBSet = {
     ["Las Vaquitas Saturnitas"] = true,
     ["Pot Hotspot"] = true,
 }
-
 local webhookCSet = {}
-for k in pairs(webhookASet) do webhookCSet[k] = true end
-for k in pairs(webhookBSet) do webhookCSet[k] = true end
+for pet in pairs(webhookASet) do webhookCSet[pet] = true end
+for pet in pairs(webhookBSet) do webhookCSet[pet] = true end
 
 -- Webhook sender
 local function sendWebhook(url, content)
@@ -41,37 +40,33 @@ local function sendWebhook(url, content)
     end)
 end
 
--- Join script
+-- Teleport script string
 local function getTeleportScript()
     return string.format([[local ts = game:GetService("TeleportService")
 local plr = game.Players.LocalPlayer
 ts:TeleportToPlaceInstance(%d, "%s", plr)]], placeId, jobId)
 end
 
--- Alert generator
+-- Webhook alert
 local function sendPetAlert(petName)
+    lastFoundTime = tick()
     local baseMsg = "**Pet Found:** `" .. petName .. "`\n" ..
         "Job ID: `" .. jobId .. "`\n" ..
         "Teleport Script:\n```lua\n" .. getTeleportScript() .. "\n```\n" ..
         "Join Link:\nhttps://testing5312.github.io/joiner/?placeId=" .. placeId .. "&gameInstanceId=" .. jobId
 
-    -- Send to Webhook A
     if webhookASet[petName] then
         sendWebhook(webhookAURL, "@everyone\n" .. baseMsg)
     end
-
-    -- Send to Webhook B
     if webhookBSet[petName] then
         sendWebhook(webhookBURL, baseMsg)
     end
-
-    -- Send to Webhook C (always)
     if webhookCSet[petName] then
         sendWebhook(webhookCURL, baseMsg)
     end
 end
 
--- Pet name fetcher
+-- Get pet name from model
 local function getPetName(model)
     if model:FindFirstChild("PetName") and model.PetName:IsA("StringValue") then
         return model.PetName.Value
@@ -81,26 +76,29 @@ local function getPetName(model)
     return model.Name
 end
 
--- Scan all pets in workspace
+-- Scan for pets in workspace
 local function scanPets()
+    local foundAny = false
     for _, obj in ipairs(workspace:GetChildren()) do
         if obj:IsA("Model") and obj:FindFirstChild("HumanoidRootPart") then
             local name = getPetName(obj)
             if name then
                 name = name:match("^%s*(.-)%s*$")
                 if webhookCSet[name] then
+                    print("[✅ PET DETECTED] " .. name)
                     sendPetAlert(name)
+                    foundAny = true
                 end
             end
         end
     end
+    return foundAny
 end
 
--- Fast server hop
+-- Server hop function
 local function serverHop()
     local tries = 0
     local cursor = nil
-
     while tries < maxTeleportRetries do
         local url = "https://games.roblox.com/v1/games/" .. placeId .. "/servers/Public?sortOrder=Asc&limit=100"
         if cursor then url = url .. "&cursor=" .. cursor end
@@ -112,14 +110,17 @@ local function serverHop()
         if success and data and data.data then
             for _, server in ipairs(data.data) do
                 if server.playing < server.maxPlayers and not server.privateServerId and not visitedJobIds[server.id] and server.id ~= jobId then
+                    if tick() - lastFoundTime < 10 then
+                        print("[⏳ WAITING] Found pet recently. Not hopping yet.")
+                        return
+                    end
                     visitedJobIds[server.id] = true
-                    tries += 1
-                    task.spawn(function()
-                        pcall(function()
-                            TeleportService:TeleportToPlaceInstance(placeId, server.id, LocalPlayer)
-                        end)
+                    print("[🌐 HOPPING] Trying jobId: " .. server.id)
+                    pcall(function()
+                        TeleportService:TeleportToPlaceInstance(placeId, server.id, LocalPlayer)
                     end)
                     task.wait(0.1)
+                    tries += 1
                 end
             end
             cursor = data.nextPageCursor
@@ -128,20 +129,20 @@ local function serverHop()
         end
         task.wait(0.2)
     end
-
-    serverHop()
 end
 
--- Initial scan loop
+-- Run scanning loop
 task.spawn(function()
     while true do
-        scanPets()
+        local found = scanPets()
+        if not found and tick() - lastFoundTime >= 10 then
+            serverHop()
+        end
         task.wait(3)
-        serverHop()
     end
 end)
 
--- Real-time pet detection
+-- Live detection
 workspace.DescendantAdded:Connect(function(desc)
     if desc:IsA("Model") then
         task.wait(0.02)
@@ -149,10 +150,11 @@ workspace.DescendantAdded:Connect(function(desc)
         if name then
             name = name:match("^%s*(.-)%s*$")
             if webhookCSet[name] then
+                print("[📦 LIVE DETECT] " .. name)
                 sendPetAlert(name)
             end
         end
     end
 end)
 
-print("✅ Script running with fixed webhook logic and fast hops.")
+print("✅ Script loaded: scanning + hopping with delay on pet detection.")
