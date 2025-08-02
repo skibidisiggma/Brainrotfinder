@@ -1,8 +1,16 @@
 local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
 local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
 
 local PLACE_ID = 109983668079237
+local MAX_HOPS = 125
+local hopsDone = 0
+
+local webhookA = "https://discord.com/api/webhooks/1398949589792587897/bjhmpxp-gy5zzi_S5gxaJTT4pT0RRlSF3jdI4CuhvoP8y-efC5SoIKRiopMVpDdKZL2X"
+local webhookB = "https://discord.com/api/webhooks/1399229152649019452/DMtjxmpnDT0LG0NFxhPNil0NdgAEtpco_DBbKkLd2FOx7_z2CnANyooo-pV3kJEUKBnH"
+
+local joinerBase = "https://testing5312.github.io/joiner/?placeId="..PLACE_ID.."&gameInstanceId="
 
 local targetedPets = {
     ["Los Combinasionas"] = true,
@@ -13,124 +21,161 @@ local targetedPets = {
     ["Chicleteira Bicicleteira"] = true,
 }
 
-local function sendWebhook(petName, inMachine)
-    local webhookUrl = inMachine
-        and "https://discord.com/api/webhooks/1398949589792587897/bjhmpxp-gy5zzi_S5gxaJTT4pT0RRlSF3jdI4CuhvoP8y-efC5SoIKRiopMVpDdKZL2X"
-        or "https://discord.com/api/webhooks/1399229152649019452/DMtjxmpnDT0LG0NFxhPNil0NdgAEtpco_DBbKkLd2FOx7_z2CnANyooo-pV3kJEUKBnH"
-
-    local jobId = game.JobId
-    local safariLink = "https://testing5312.github.io/joiner/?placeId=" .. PLACE_ID .. "&gameInstanceId=" .. jobId
-
-    local content = {
-        content = inMachine and "@everyone" or "",
-        embeds = {{
-            title = inMachine and "**Pet Found In Machine!**" or "**Pet Found!**",
-            description = ("Pet: %s\nJob ID: %s\nTeleport Script:\n```lua\ngame:GetService(\"TeleportService\"):TeleportToPlaceInstance(%d, \"%s\")\n```\nJoin with Safari:\n[%s](%s)")
-                :format(petName, jobId, PLACE_ID, jobId, safariLink, safariLink),
-            color = inMachine and 0xFF0000 or 0x00FF00,
-        }}
-    }
-
-    local data = HttpService:JSONEncode(content)
-
-    local success, err = pcall(function()
-        HttpService:PostAsync(webhookUrl, data, Enum.HttpContentType.ApplicationJson)
-    end)
-
-    if not success then
-        warn("Failed to send webhook:", err)
-    else
-        print("Webhook sent for pet:", petName, inMachine and "(In Machine)" or "")
-    end
-end
-
-local function isPetInMachine(petModel)
-    local machine = workspace:FindFirstChild("Fuse Machine")
-    return machine and petModel:IsDescendantOf(machine)
-end
-
-local function scanForPets()
-    print("Scanning for pets...")
-    local found = false
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA("Model") and obj.Name == "Pet" and obj:FindFirstChild("Name") then
-            local petName = obj.Name.Value or obj:FindFirstChild("Name").Value
-            if targetedPets[petName] then
-                found = true
-                local inMachine = isPetInMachine(obj)
-                sendWebhook(petName, inMachine)
-            end
-        end
-    end
-    return found
-end
-
-local function getPublicServers()
+-- Helper to get public servers, returns list of JobIds (up to 100)
+local function getPublicServers(cursor)
     local servers = {}
-    local cursor = ""
-    repeat
-        local url = ("https://games.roblox.com/v1/games/%d/servers/Public?sortOrder=Asc&limit=100%s"):format(
-            PLACE_ID,
-            cursor ~= "" and "&cursor=" .. cursor or ""
-        )
-        local success, result = pcall(function()
-            return HttpService:JSONDecode(game:HttpGet(url))
-        end)
-        if success and result and result.data then
-            for _, server in ipairs(result.data) do
-                if server.id ~= game.JobId then
-                    table.insert(servers, server.id)
-                end
+    local url = ("https://games.roblox.com/v1/games/%d/servers/Public?limit=100%s"):format(PLACE_ID, cursor and "&cursor="..cursor or "")
+    local success, response = pcall(function()
+        return HttpService:JSONDecode(game:HttpGet(url))
+    end)
+    if success and response and response.data then
+        for _, server in ipairs(response.data) do
+            if server.playing ~= server.maxPlayers then
+                table.insert(servers, server.id)
             end
-            cursor = result.nextPageCursor or ""
-        else
-            warn("Failed to get servers.")
-            break
         end
-    until cursor == "" or #servers > 0
+        if response.nextPageCursor then
+            -- Optional: Fetch more pages if needed, but 100 servers max per request is enough
+        end
+    else
+        warn("Failed to fetch servers:", response)
+    end
     return servers
 end
 
-local function serverHop()
-    local retryDelay = 1
-
-    local servers = getPublicServers()
-    if #servers == 0 then
-        warn("No servers found. Retrying in 3s...")
-        task.wait(3)
-        return serverHop()
+-- Send Discord webhook
+local function sendWebhook(url, petName, inMachine, jobId)
+    local mention = ""
+    local content = ""
+    if inMachine then
+        mention = "@everyone"
+        local joinLink = joinerBase .. jobId
+        content = mention .. "\n**Pet found inside the machine!**\n"..
+                  "**Pet:** "..petName.."\n"..
+                  "**Job ID:** "..jobId.."\n"..
+                  "**Teleport Script:** ```lua\nTeleportService:TeleportToPlaceInstance("..PLACE_ID..", \""..jobId.."\", LocalPlayer)```"..
+                  "\n**Join link (Safari):** "..joinLink.."\n"..
+                  "(Copy Job ID: "..jobId..")"
+    else
+        content = "**Pet found outside the machine!**\n"..
+                  "**Pet:** "..petName
     end
 
-    local newServerId = servers[math.random(1, #servers)]
-    print("Teleporting to:", newServerId)
+    local data = {
+        ["content"] = content,
+        ["allowed_mentions"] = { parse = inMachine and {"everyone"} or {} }
+    }
+    local headers = {["Content-Type"] = "application/json"}
 
     pcall(function()
-        queue_on_teleport('loadstring(game:HttpGet("YOUR_RAW_SCRIPT_URL_HERE"))()') -- 🟡 Replace this
+        HttpService:PostAsync(url, HttpService:JSONEncode(data), Enum.HttpContentType.ApplicationJson)
     end)
-
-    local success = false
-    repeat
-        success = pcall(function()
-            TeleportService:TeleportToPlaceInstance(PLACE_ID, newServerId, Players.LocalPlayer)
-        end)
-        if not success then
-            warn("Teleport failed. Retrying in", retryDelay, "seconds...")
-            task.wait(retryDelay)
-        end
-    until success
 end
 
-local function main()
-    local found = scanForPets()
+-- Scan pets in workspace
+local function scanPets()
+    local foundPets = {}
+    local fuseMachine = workspace:FindFirstChild("Fuse Machine")
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("BillboardGui") and targetedPets[obj.Name] then
+            local inMachine = false
+            if fuseMachine and fuseMachine:FindFirstChild(obj.Name) then
+                inMachine = true
+            end
+            if not foundPets[obj.Name] then
+                foundPets[obj.Name] = true
+                local jobId = game.JobId or "UnknownJobId"
+                if inMachine then
+                    sendWebhook(webhookA, obj.Name, true, jobId)
+                else
+                    sendWebhook(webhookB, obj.Name, false, jobId)
+                end
+            end
+        end
+    end
+    return foundPets
+end
 
-    if found then
-        print("Targeted pet found. Waiting 5 seconds before hopping...")
-        task.wait(5)
-    else
-        print("No targeted pets found. Hopping immediately.")
+-- Server hop logic with retry up to 100 different servers
+local function serverHop()
+    while true do
+        local servers = getPublicServers()
+        if #servers == 0 then
+            warn("No servers available, retrying in 3 seconds...")
+            task.wait(3)
+        else
+            local attempts = 0
+            for _, serverId in ipairs(servers) do
+                if serverId ~= game.JobId then
+                    attempts = attempts + 1
+                    print("Attempting to teleport to server:", serverId)
+
+                    pcall(function()
+                        queue_on_teleport('loadstring(game:HttpGet("PASTE_YOUR_RAW_SCRIPT_URL_HERE"))()')
+                    end)
+
+                    local success, err = pcall(function()
+                        TeleportService:TeleportToPlaceInstance(PLACE_ID, serverId, LocalPlayer)
+                    end)
+
+                    if success then
+                        print("Teleport request sent to server:", serverId)
+                        task.wait(5) -- wait some time before next attempt if teleport fails silently
+                        if game.JobId ~= serverId then
+                            return
+                        else
+                            warn("Teleport failed or still in same server, trying next server...")
+                        end
+                    else
+                        warn("Teleport error:", err)
+                    end
+
+                    if attempts >= 100 then
+                        warn("Tried 100 servers, restarting server search...")
+                        break
+                    end
+                end
+            end
+            task.wait(1)
+        end
+    end
+end
+
+local function startSearch()
+    hopsDone = hopsDone + 1
+    if hopsDone > MAX_HOPS then
+        warn("Max hops reached, stopping.")
+        return
     end
 
-    serverHop()
+    print("Scanning server #" .. hopsDone)
+    local foundPets = scanPets()
+    if next(foundPets) then
+        print("Found targeted pets, staying for 5 seconds...")
+        task.wait(5)
+    else
+        print("No targeted pets found, waiting 2 seconds before server hop...")
+        task.wait(2)
+        serverHop()
+    end
 end
 
-main()
+-- Live pet spawn detection
+workspace.DescendantAdded:Connect(function(obj)
+    task.wait(0.02)
+    if obj:IsA("BillboardGui") and targetedPets[obj.Name] then
+        local fuseMachine = workspace:FindFirstChild("Fuse Machine")
+        local inMachine = fuseMachine and fuseMachine:FindFirstChild(obj.Name)
+        sendWebhook(inMachine and webhookA or webhookB, obj.Name, inMachine ~= nil, game.JobId)
+        task.wait(5)
+        serverHop()
+    end
+end)
+
+-- Auto-start after 10 seconds delay
+task.delay(10, function()
+    while hopsDone < MAX_HOPS do
+        startSearch()
+        task.wait(1)
+    end
+end)
