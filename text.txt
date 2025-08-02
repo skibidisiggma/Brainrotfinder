@@ -14,12 +14,9 @@ local targetedPets = {
 }
 
 local function sendWebhook(petName, inMachine)
-    local webhookUrl
-    if inMachine then
-        webhookUrl = "https://discord.com/api/webhooks/1398949589792587897/bjhmpxp-gy5zzi_S5gxaJTT4pT0RRlSF3jdI4CuhvoP8y-efC5SoIKRiopMVpDdKZL2X"
-    else
-        webhookUrl = "https://discord.com/api/webhooks/1399229152649019452/DMtjxmpnDT0LG0NFxhPNil0NdgAEtpco_DBbKkLd2FOx7_z2CnANyooo-pV3kJEUKBnH"
-    end
+    local webhookUrl = inMachine
+        and "https://discord.com/api/webhooks/1398949589792587897/bjhmpxp-gy5zzi_S5gxaJTT4pT0RRlSF3jdI4CuhvoP8y-efC5SoIKRiopMVpDdKZL2X"
+        or "https://discord.com/api/webhooks/1399229152649019452/DMtjxmpnDT0LG0NFxhPNil0NdgAEtpco_DBbKkLd2FOx7_z2CnANyooo-pV3kJEUKBnH"
 
     local jobId = game.JobId
     local safariLink = "https://testing5312.github.io/joiner/?placeId=" .. PLACE_ID .. "&gameInstanceId=" .. jobId
@@ -49,26 +46,23 @@ end
 
 local function isPetInMachine(petModel)
     local machine = workspace:FindFirstChild("Fuse Machine")
-    if not machine then return false end
-    return petModel:IsDescendantOf(machine)
+    return machine and petModel:IsDescendantOf(machine)
 end
 
 local function scanForPets()
-    print("Scanning server for targeted pets...")
-    local foundAny = false
-
-    for _, petModel in pairs(workspace:GetDescendants()) do
-        if petModel:IsA("Model") and petModel.Name == "Pet" and petModel:FindFirstChild("Name") then
-            local petNameValue = petModel:FindFirstChild("Name").Value
-            if targetedPets[petNameValue] then
-                foundAny = true
-                local inMachine = isPetInMachine(petModel)
-                sendWebhook(petNameValue, inMachine)
+    print("Scanning for pets...")
+    local found = false
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("Model") and obj.Name == "Pet" and obj:FindFirstChild("Name") then
+            local petName = obj.Name.Value or obj:FindFirstChild("Name").Value
+            if targetedPets[petName] then
+                found = true
+                local inMachine = isPetInMachine(obj)
+                sendWebhook(petName, inMachine)
             end
         end
     end
-
-    return foundAny
+    return found
 end
 
 local function getPublicServers()
@@ -90,6 +84,7 @@ local function getPublicServers()
             end
             cursor = result.nextPageCursor or ""
         else
+            warn("Failed to get servers.")
             break
         end
     until cursor == "" or #servers > 0
@@ -97,30 +92,42 @@ local function getPublicServers()
 end
 
 local function serverHop()
+    local retryDelay = 1
+
     local servers = getPublicServers()
     if #servers == 0 then
-        warn("No suitable servers found, retrying in 3 seconds...")
+        warn("No servers found. Retrying in 3s...")
         task.wait(3)
         return serverHop()
     end
 
     local newServerId = servers[math.random(1, #servers)]
-    print("Teleporting to server:", newServerId)
+    print("Teleporting to:", newServerId)
 
-    -- If you want your script to queue on teleport, replace this URL with your raw script URL:
-    queue_on_teleport('loadstring(game:HttpGet("YOUR_RAW_SCRIPT_RAW_URL"))()')
+    pcall(function()
+        queue_on_teleport('loadstring(game:HttpGet("YOUR_RAW_SCRIPT_URL_HERE"))()') -- 🟡 Replace this
+    end)
 
-    TeleportService:TeleportToPlaceInstance(PLACE_ID, newServerId, Players.LocalPlayer)
+    local success = false
+    repeat
+        success = pcall(function()
+            TeleportService:TeleportToPlaceInstance(PLACE_ID, newServerId, Players.LocalPlayer)
+        end)
+        if not success then
+            warn("Teleport failed. Retrying in", retryDelay, "seconds...")
+            task.wait(retryDelay)
+        end
+    until success
 end
 
 local function main()
     local found = scanForPets()
 
     if found then
-        print("Targeted pet(s) found! Staying 5 seconds before hopping...")
+        print("Targeted pet found. Waiting 5 seconds before hopping...")
         task.wait(5)
     else
-        print("No targeted pets found. Hopping immediately...")
+        print("No targeted pets found. Hopping immediately.")
     end
 
     serverHop()
