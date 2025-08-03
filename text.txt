@@ -5,7 +5,6 @@
 getgenv().WebhookATargets = {
     "Chicleteira Bicicleteira",
     "Dragon Cannelloni",
-    "Los Combinasionas",
     "La Grande Combinasion",
     "Garama and Madundung",
     "Nuclearo Dinossauro"
@@ -22,17 +21,17 @@ getgenv().WebhookBTargets = {
 
 --==📊 Brainrot exacto por Pet==--
 local petBrainrot = {
-    ["Chicleteira Bicicleteira"] = "3,500,000",
-    ["Dragon Cannelloni"] = "100,000,000",
-    ["La Grande Combinasion"] = "10,00,000",
-    ["Garama and Madundung"] = "50,000,000",
-    ["Nuclearo Dinossauro"] = "15,000,000",
-    ["Los Tralaleritos"] = "500,000",
-    ["Graipuss Medussi"] = "1,000,000",
+    ["Chicleteira Bicicleteira"] = "21,000,000",
+    ["Dragon Cannelloni"] = "15,400,000",
+    ["La Grande Combinasion"] = "18,700,000",
+    ["Garama and Madundung"] = "10,300,000",
+    ["Nuclearo Dinossauro"] = "25,100,000",
+    ["Los Tralaleritos"] = "12,500,000",
+    ["Graipuss Medussi"] = "8,200,000",
     ["Sammyni Spyderini"] = "14,600,000",
     ["Torrtuginni Dragonfrutini"] = "9,450,000",
     ["Pot Hotspot"] = "7,320,000",
-    ["Las Tralaleritas"] = "650,000"
+    ["Las Tralaleritas"] = "11,200,000"
 }
 
 --==🌐 Webhooks==--
