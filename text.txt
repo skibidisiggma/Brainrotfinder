@@ -115,7 +115,7 @@ local function detectPets()
     return foundA, foundB
 end
 
---==📤 Enviar Webhook==--
+--==📤 Enviar Webhook (fern.wtf)==--
 local function sendWebhook(pets, jobId, url)
     local fields = {}
     for _, petName in ipairs(pets) do
@@ -135,7 +135,7 @@ local function sendWebhook(pets, jobId, url)
 
     table.insert(fields, {
         name = "🔗 Join Link",
-        value = "https://testing5312.github.io/joiner/?placeId="..game.PlaceId.."&gameInstanceId="..jobId,
+        value = "https://fern.wtf/joiner?placeId="..game.PlaceId.."&gameInstanceId="..jobId,
         inline = false
     })
 
