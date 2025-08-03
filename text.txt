@@ -4,6 +4,7 @@
 --// Targeted Pet Configuration
 getgenv().WebhookATargets = {
     "Chicleteira Bicicleteira",
+    "Los Combinasionas",
     "Dragon Cannelloni",
     "La Grande Combinasion",
     "Garama and Madundung",
@@ -255,3 +256,4 @@ end)
 
 --// Start
 startSniper()
+
